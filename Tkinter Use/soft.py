@@ -1,19 +1,25 @@
-import sounddevice as sd
-import numpy as np
-import wavio
+from pvrecorder import PvRecorder
+import wave
+import struct
+import time
 
-def record_wav(file_path, duration=5, sample_rate=44100):
-    # Record audio
-    recording = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=2, dtype=np.int16)
-    sd.wait()
+recorder = PvRecorder(device_index=0, frame_length=512)  # (32 milliseconds of 16 kHz audio)
+audio = []
+path = 'audio_recording.wav'
+duration = 10  # recording duration in seconds
 
-    # Save the recording as a WAV file
-    wavio.write(file_path, recording, sample_rate, sampwidth=3)
+try:
+    recorder.start()
+    start_time = time.time()
 
-# Set your file path and recording duration
-file_path = "recorded_audio.wav"
-record_duration = 5  # seconds
-
-print(f"Recording {record_duration} seconds of audio...")
-record_wav(file_path, duration=record_duration)
-print(f"Audio recorded and saved to {file_path}")
+    while (time.time() - start_time) < duration:
+        frame = recorder.read()
+        audio.extend(frame)
+except KeyboardInterrupt:
+    pass  # Continue to the finally block even if KeyboardInterrupt is raised
+finally:
+    recorder.stop()
+    with wave.open(path, 'w') as f:
+        f.setparams((1, 2, 16000, 512, "NONE", "NONE"))
+        f.writeframes(struct.pack("h" * len(audio), *audio))
+    recorder.delete()

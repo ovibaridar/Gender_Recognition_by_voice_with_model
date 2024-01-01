@@ -1,58 +1,130 @@
 import tkinter as tk
 from tkinter import ttk
+import numpy as np
+import librosa
+from scipy.stats import kurtosis
+import pandas as pd
+from pvrecorder import PvRecorder
+import wave
+import struct
+import time
 
-root = tk.Tk()
-root.geometry("600x400")
-root.resizable(False, False)
+class AudioAnalyzerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.geometry("600x400")
+        self.root.resizable(False, False)
+        self.current_theme = "forest-dark"
+        self.create_gui()
 
-# Initialize a variable to track the current theme
-current_theme = "forest-dark"
-font = ("Times New Roman CE", 10)
+    def create_gui(self):
+        self.style = ttk.Style(self.root)
+        if "forest-dark" not in self.style.theme_names():
+            self.root.tk.call('source', 'forest-dark.tcl')
+        self.style.theme_use('forest-dark')
 
-# Variable to track whether an image is displayed in frame2
-image_displayed = False
+        self.frame1 = ttk.Frame(self.root, height=400, width=600)
+        self.frame1.pack()
+        self.mode = ttk.Checkbutton(self.frame1, style="Switch", command=self.toggle_theme)
+        self.mode.place(x=550, y=10)
+
+        self.button_create = ttk.Button(text='Check', width=15, command=self.record_f)
+        self.button_create.place(x=140, y=130)
+
+        self.frame2 = ttk.Frame(self.frame1, height=200, width=200, relief="groove", borderwidth=2)
+        self.frame2.propagate(0)
+        self.frame2.place(x=380, y=80)
+
+        self.lab1 = ttk.Label(self.frame2, text='')
+        self.lab1.pack()
+
+        self.lab2 = ttk.Label(self.frame2, text='')
+        self.lab2.place(x=100, y=100)
+
+    def toggle_theme(self):
+        if self.current_theme == "forest-dark":
+            if "forest-light" not in self.style.theme_names():
+                self.root.tk.call('source', 'forest-light.tcl')
+            self.style.theme_use('forest-light')
+            self.current_theme = "forest-light"
+        else:
+            self.style.theme_use('forest-dark')
+            self.current_theme = "forest-dark"
+
+    def record_f(self):
+        recorder = PvRecorder(device_index=0, frame_length=512)  # (32 milliseconds of 16 kHz audio)
+        audio = []
+        path = 'audio_recording.wav'
+        duration = 10  # recording duration in seconds
+
+        try:
+            recorder.start()
+            start_time = time.time()
+
+            while (time.time() - start_time) < duration:
+                frame = recorder.read()
+                audio.extend(frame)
+        except KeyboardInterrupt:
+            pass  # Continue to the finally block even if KeyboardInterrupt is raised
+        finally:
+            recorder.stop()
+            with wave.open(path, 'w') as f:
+                f.setparams((1, 2, 16000, 512, "NONE", "NONE"))
+                f.writeframes(struct.pack("h" * len(audio), *audio))
+            recorder.delete()
 
 
-def toggle():
-    global current_theme
-    if current_theme == "forest-dark":
-        if "forest-light" not in style.theme_names():
-            root.tk.call('source', 'forest-light.tcl')
-        style.theme_use('forest-light')
-        current_theme = "forest-light"
-    else:
-        style.theme_use('forest-dark')
-        current_theme = "forest-dark"
 
 
-def start(count=0):
-    lab1.config(text='Recording Start...')
-    if count < 11:
-        lab2.config(text=count)
-        root.after(1000, start, count + 1)
+
+    def extract_features(self):
+        audio_file = 'audio_recording.wav'
+        y, sr = librosa.load(audio_file)
+
+        fft_result = np.fft.fft(y)
+        fft_freq = np.fft.fftfreq(len(fft_result), 1 / sr)
+        max_freq_index = np.argmax(np.abs(fft_result))
+        mean_freq = np.abs(fft_freq[max_freq_index]) / 1000
+
+        sd_freq = np.std(librosa.feature.spectral_centroid(y=y, sr=sr)[0])
+        median_freq = np.median(librosa.feature.spectral_centroid(y=y, sr=sr)[0]) / 1000
+        q25_freq = np.percentile(librosa.feature.spectral_centroid(y=y, sr=sr)[0], 25) / 1000
+        q75_freq = np.percentile(librosa.feature.spectral_centroid(y=y, sr=sr)[0], 75) / 1000
+        iqr_freq = (q75_freq - q25_freq) / 1000
+        skewness = float(librosa.feature.spectral_bandwidth(y=y, sr=sr).std())
+        kurtosis_val = float(kurtosis(librosa.feature.spectral_bandwidth(y=y, sr=sr)[0])) / 1000
+
+        spectral_flatness = float(np.mean(librosa.feature.spectral_flatness(y=y)))
+
+        tempogram = librosa.feature.tempogram(y=y, sr=sr)
+        tempogram_mean = float(np.mean(tempogram)) / 1000
+        mode_freq = float(np.argmax(tempogram_mean))
+        centroid_freq = float(librosa.feature.spectral_centroid(y=y, sr=sr)[0].mean())
+        peak_freq = float(librosa.feature.spectral_centroid(y=y, sr=sr)[0].argmax())
+
+        mean_fun = np.mean(librosa.feature.rms(y=y)) / 1000
+        min_fun = np.min(librosa.feature.rms(y=y)) / 1000
+        max_fun = np.max(librosa.feature.rms(y=y)) / 1000
+
+        mean_dom = np.mean(tempogram)
+        min_dom = np.min(tempogram)
+        max_dom = np.max(tempogram)
+
+        fund_freq = librosa.yin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'))
+        mod_index = np.sum(np.abs(np.diff(fund_freq))) / (fund_freq.max() - fund_freq.min())
+
+        data_frame = pd.DataFrame(
+            columns=['mean_freq', 'sd_freq', 'median_freq', 'q25_freq', 'q75_freq', 'iqr_freq', 'skewness',
+                     'kurtosis_val', 'spectral_flatness', 'tempogram_mean', 'mode_freq', 'centroid_freq', 'peak_freq',
+                     'mean_fun', 'min_fun', 'max_fun', 'mean_dom', 'min_dom', 'max_dom', 'fund_freq', 'mod_index'])
+        data_frame.loc[0] = [mean_freq, sd_freq, median_freq, q25_freq, q75_freq, iqr_freq, skewness, kurtosis_val,
+                             spectral_flatness, tempogram_mean, mode_freq, centroid_freq, peak_freq, mean_fun, min_fun,
+                             max_fun, mean_dom, min_dom, max_dom, fund_freq.mean(), mod_index]
+
+        return data_frame
 
 
-style = ttk.Style(root)
-if "forest-dark" not in style.theme_names():
-    root.tk.call('source', 'forest-dark.tcl')
-style.theme_use('forest-dark')
-
-frame1 = ttk.Frame(root, height=400, width=600)
-frame1.pack()
-mode = ttk.Checkbutton(frame1, style="Switch", command=toggle)
-mode.place(x=550, y=10)
-
-button_create = ttk.Button(text='Check', width=15, command=start)
-button_create.place(x=140, y=130)
-
-frame2 = ttk.Frame(frame1, height=200, width=200, relief="groove", borderwidth=2)
-frame2.propagate(0)
-frame2.place(x=380, y=80)
-
-lab1 = ttk.Label(frame2, text='')
-lab1.pack()
-
-lab2 = ttk.Label(frame2, text='')
-lab2.place(x=100, y=100)
-
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = AudioAnalyzerApp(root)
+    root.mainloop()
