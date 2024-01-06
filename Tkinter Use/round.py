@@ -8,7 +8,7 @@ root = tk.Tk()
 root.title("Round Button Example")
 
 # Set the window size
-root.geometry("200x200")
+root.geometry("200x300")
 
 # Create a canvas to draw the round button
 canvas = tk.Canvas(root, width=200, height=200, bg='white')
