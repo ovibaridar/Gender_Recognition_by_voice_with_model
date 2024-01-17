@@ -1,7 +1,7 @@
 import tkinter as tk
 
 root = tk.Tk()
-root.geometry("600x400")
+root.geometry("600x420")
 root.resizable(False, False)
 
 
