@@ -28,7 +28,7 @@ class AudioAnalyzerApp:
         self.mode = ttk.Checkbutton(self.frame1, style="Switch", command=self.toggle_theme)
         self.mode.place(x=550, y=10)
 
-        self.button_create = ttk.Button(text='Check', width=15, command=self.record_f)
+        self.button_create = ttk.Button(text='Record', width=15, command=self.record_f)
         self.button_create.place(x=140, y=130)
 
         self.frame2 = ttk.Frame(self.frame1, height=200, width=200, relief="groove", borderwidth=2)
