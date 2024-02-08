@@ -1,31 +1,75 @@
+import os
+import wave
+import time
+import threading
 import tkinter as tk
+import pyaudio
 
-def on_button_click():
-    print("Button clicked!")
 
-# Create the main Tkinter window
-root = tk.Tk()
-root.title("Round Button Example")
+class VoiceRecorder:
 
-# Set the window size
-root.geometry("200x300")
+    def __init__(self):
+        self.root = tk.Tk()
+        self.button = tk.Button(text="🎤", font=("Arial", 120, "bold"),
+                                command=self.click_handler)
+        self.button.pack()
+        self.label = tk.Label(text="00:00:00")
+        self.label.pack()
+        self.recording = False
+        self.audio = pyaudio.PyAudio()
+        self.stream = self.audio.open(format=pyaudio.paInt16, channels=1, rate=44100,
+                                      input=True, frames_per_buffer=1024)
+        self.frames = []
+        self.root.mainloop()
 
-# Create a canvas to draw the round button
-canvas = tk.Canvas(root, width=200, height=200, bg='white')
-canvas.pack(pady=20)
+    def click_handler(self):
+        if self.recording:
+            self.recording = False
+            self.button.config(fg="black")
+            threading.Thread(target=self.save_recording_and_show_label).start()
+        else:
+            self.recording = True
+            self.button.config(fg="red")
+            self.frames = []
+            threading.Thread(target=self.record).start()
 
-# Draw the round button on the canvas with a black fill color
-button_radius = 80
-button_center = (100, 100)
-button = canvas.create_oval(button_center[0] - button_radius, button_center[1] - button_radius,
-                             button_center[0] + button_radius, button_center[1] + button_radius,
-                             fill='white', outline='black')
+    def record(self):
+        start = time.time()
+        while self.recording:
+            data = self.stream.read(1024)
+            self.frames.append(data)
 
-# Add text to the button
-button_text = canvas.create_text(button_center[0], button_center[1], text="Click Me", fill='white', font=('Arial', 12, 'bold'))
+            passed = time.time() - start
 
-# Bind the button click event to a function
-canvas.tag_bind(button, '<Button-1>', lambda event: on_button_click())
+            secs = passed % 60
+            mins = passed // 60
+            hours = mins // 60
 
-# Run the Tkinter event loop
-root.mainloop()
+            self.root.after(1000, self.update_label, int(hours), int(mins), int(secs))
+
+    def save_recording_and_show_label(self):
+        self.save_recording()
+        self.show_saved_label()
+
+    def save_recording(self):
+        sound_file = wave.open("Create File.wav", "wb")
+        sound_file.setnchannels(1)
+        sound_file.setsampwidth(self.audio.get_sample_size(pyaudio.paInt16))
+        sound_file.setframerate(44100)
+        sound_file.writeframes(b"".join(self.frames))
+        sound_file.close()
+
+    def update_label(self, hours, mins, secs):
+        self.label.config(text=f"{hours:02d}:{mins:02d}:{secs:02d}")
+
+    def show_saved_label(self):
+        saved_label = tk.Label(text="Recording saved!", font=("Arial", 24))
+        saved_label.pack()
+
+
+
+
+
+
+
+VoiceRecorder()

@@ -1,25 +1,48 @@
-from pvrecorder import PvRecorder
+import tkinter as tk
+import sounddevice as sd
+import numpy as np
 import wave
-import struct
-import time
 
-recorder = PvRecorder(device_index=0, frame_length=512)  # (32 milliseconds of 16 kHz audio)
-audio = []
-path = 'audio_recording.wav'
-duration = 10  # recording duration in seconds
+class AudioRecorder:
+    def __init__(self, master):
+        self.master = master
+        self.record_button = tk.Button(master, text="Record", command=self.record)
+        self.record_button.pack()
+        self.stop_button = tk.Button(master, text="Stop", command=self.stop, state=tk.DISABLED)
+        self.stop_button.pack()
 
-try:
-    recorder.start()
-    start_time = time.time()
+    def record(self):
+        self.record_button.config(state=tk.DISABLED)
+        self.stop_button.config(state=tk.NORMAL)
 
-    while (time.time() - start_time) < duration:
-        frame = recorder.read()
-        audio.extend(frame)
-except KeyboardInterrupt:
-    pass  # Continue to the finally block even if KeyboardInterrupt is raised
-finally:
-    recorder.stop()
-    with wave.open(path, 'w') as f:
-        f.setparams((1, 2, 16000, 512, "NONE", "NONE"))
-        f.writeframes(struct.pack("h" * len(audio), *audio))
-    recorder.delete()
+        self.frames = []
+        self.stream = sd.InputStream(callback=self.callback)
+        self.stream.start()
+
+    def stop(self):
+        self.stream.stop()
+        self.stream.close()
+
+        wf = wave.open("recording.wav", 'wb')
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(44100)
+        wf.writeframes(b''.join(self.frames))
+        wf.close()
+
+        self.record_button.config(state=tk.NORMAL)
+        self.stop_button.config(state=tk.DISABLED)
+
+    def callback(self, indata, frames, time, status):
+        if status:
+            print(status)
+        self.frames.append(indata.copy())
+
+def main():
+    root = tk.Tk()
+    root.title("Audio Recorder")
+    app = AudioRecorder(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
